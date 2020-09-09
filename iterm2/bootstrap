@@ -1,0 +1,20 @@
+# shellcheck shell=bash
+
+if [[ "$OSTYPE" != darwin* ]]; then
+  return
+fi
+
+cask iterm2
+cask font-jetbrains-mono
+
+IFS=$'\n' read -r -d '' -a scripts < <(find "$topic/scripts" \
+                                           -type f \
+                                           -iname '*.scpt' \
+                                         | sort && printf '\0')
+
+for script in "${scripts[@]}"; do
+  symlink "$script" \
+          "$HOME/Library/Application Support/iTerm2/Scripts/${script##*/}"
+done
+
+# vim: set ft=sh ts=2 sw=2 et:

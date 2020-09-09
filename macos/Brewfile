@@ -1,0 +1,47 @@
+# Allows to install updates automatically.
+tap 'domt4/autoupdate'
+
+# Remove formula and its dependencies with 'brew rmrec <formula>'.
+tap 'ggpeti/rmrec'
+
+# GNU utilities.
+
+brew 'unzip'
+
+# QuickLook plugins, https://github.com/sindresorhus/quick-look-plugins
+
+# FUSE.
+
+# Apps without topic directories.
+brew 'youtube-dl'
+brew 'curl'
+cask 'banking-4'
+cask 'bartender'
+cask 'dotnet-sdk'
+cask 'google-chrome'
+cask 'brave-browser'
+cask 'microsoft-edge'
+cask 'jetbrains-toolbox'
+cask 'skype'
+cask 'choosy'
+
+# Apps from the Mac App Store.
+mas 'Microsoft Remote Desktop', id: 1_295_203_466
+mas 'LastPass', id: 926036361
+mas 'Magent', id: 441258766
+mas 'Microsoft Word', id: 462054704
+mas 'Microsoft PowerPoint', id: 462062816
+mas 'Microsoft Excel', id: 462058435
+mas 'Microsoft Outlook', id: 985367838
+mas 'Microsoft OneNote', id: 784801555
+mas 'Motion', id: 434290957
+mas 'myTuner Radio', id: 881415018
+mas 'OneDrive', id: 823766827
+mas 'Speedtest', id: 1153157709
+mas 'Twitter', id: 1482454543
+mas 'Elmedia Player', id: 937759555
+mas 'Brother iPrint&Scan', id: 1193539993
+mas 'WhatsApp', id: 1_147_396_723
+mas 'Reeder', id: 1449412482
+mas 'Xcode', id: 497799835
+# vim: set ft=ruby ts=2 sw=2 et:

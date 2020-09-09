@@ -1,0 +1,12 @@
+# shellcheck disable=SC2148
+
+local fun
+
+for fun in $*; do
+  if unfunction $fun; then
+    autoload -U $fun
+    echo Forced reload of $fun
+  fi
+done
+
+# vim: set ft=zsh ts=2 sw=2 et:

@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+
+ssh agross@home.therightstuff.de -t \$HOME/bin/wake

@@ -1,0 +1,23 @@
+# shellcheck shell=bash
+
+if [[ "$OSTYPE" == darwin* ]]; then
+  formula zsh
+
+  # Allow users to chsh to homebrew-installed zsh.
+  brew_zsh="$(brew --prefix)/bin/zsh"
+  shells=/etc/shells
+  if ! grep -F -q "$brew_zsh" "$shells"; then
+    echo "$brew_zsh" | sudo -p "Adding $brew_zsh to $shells. Password:" -- tee -a "$shells" > /dev/null
+
+    # After set up, change the shell.
+    chsh -s "$brew_zsh"
+  fi
+fi
+
+[[ "$OSTYPE" =~ ^(msys|cygwin)$ ]] && return
+
+symlink "$topic/zprofile"
+symlink "$topic/zshenv"
+symlink "$topic/zshrc"
+
+# vim: set ft=sh ts=2 sw=2 et:

@@ -2,7 +2,7 @@
 #
 # bootstrap installs things.
 #
-# Based on https://github.com/holman/dotfiles.
+# Based on https://github.com/agrossclea/dotfiles.
 
 # Fail on errors.
 set -euo pipefail
@@ -200,6 +200,8 @@ run-topic-bootstrapper() {
   shift
   local script
 
+
+
   local topic
   topic="${bootstrapper%/bootstrap}"
   topic_name="${topic##*/}"
@@ -223,9 +225,11 @@ run-topic-bootstrapper() {
   # Build script wrapper around bootstrapper.
   script="\
     set -euo pipefail
+
     source '$0' # This script.
     source '$root/macos/homebrew'
     source '$bootstrapper'
+
     # Write out the perhaps changed values for the *_all variables.
     >&3 printf '# magic unicorns!\n'
     >&3 printf 'overwrite_all=%s\n' \"\$overwrite_all\"
@@ -270,7 +274,6 @@ install-dotfiles() {
     symlink-dotfiles-to-home "$root" "$home" "$ostype"
 
     # Find topics with bootstrappers. Bash > 3 cannot be assumed (on macOS).
-    # https://stackoverflow.com/a/32931403/149264
     IFS=$'\n' read -r -d '' -a bootstrappers < <(find -H \
                                                      "$home/.dotfiles" \
                                                      -mindepth 2 \

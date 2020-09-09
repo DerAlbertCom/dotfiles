@@ -1,0 +1,55 @@
+#!/usr/bin/env zsh
+
+autoload -U colors && colors
+
+defaults=(
+  defaults
+  -currentHost
+  write
+  ~/Library/Preferences/ByHost/com.apple.notificationcenterui
+)
+
+function dnd::on() {
+  local enabledAt=$(date -u '+%Y-%m-%d %H:%M:%S +0000')
+
+  $defaults doNotDisturb -boolean true
+  $defaults doNotDisturbDate -date "$enabledAt"
+
+  killall NotificationCenter
+
+  printf 'DND turned %bon%b\n' "$fg[green]" "$reset_color"
+}
+
+function dnd::off() {
+  $defaults doNotDisturb -boolean false
+  defaults -currentHost \
+           delete \
+           ~/Library/Preferences/ByHost/com.apple.notificationcenterui \
+           doNotDisturbDate
+
+  killall NotificationCenter
+
+  printf 'DND turned %boff%b\n' "$fg[red]" "$reset_color"
+}
+
+(($+commands[m])) || {
+  >&2 printf 'Need m executable from https://github.com/rgcr/m-cli\n'
+  exit 1
+}
+
+# Pass any argument to turn off DND.
+if [[ $# -gt 0 ]]; then
+  killall caffeinate 2> /dev/null
+  m volume unmute
+  open -a Flux
+  osascript <<< 'tell application "PopClip" to set enabled to true'
+  dnd::off
+else
+  # http://unix.stackexchange.com/a/148698/72946
+  # http://stackoverflow.com/a/10408906/149264
+  nohup caffeinate -u -t $((9 * 60 * 60)) < /dev/null > /dev/null 2>&1 &disown
+  m volume mute
+  killall Flux 2> /dev/null
+  osascript <<< 'tell application "PopClip" to set enabled to false'
+  dnd::on
+fi

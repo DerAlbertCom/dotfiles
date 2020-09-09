@@ -1,0 +1,34 @@
+# Loaded for interactive shells.
+
+# Prepend startup functions path and remove duplicates.
+typeset -Ua fpath
+fpath=("$DOTFILES/zsh/functions/startup" $fpath)
+autoload -Uz $DOTFILES/zsh/functions/startup/*(.:t)
+
+verbose Loading $fg[green]zshrc$reset_color
+
+# Load color support.
+autoload -U colors && colors
+
+# shellcheck disable=SC2034
+ZPLUG_LOADFILE=$DOTFILES/zsh/zplugs
+
+# Use extended_glob option for zplug subshells. We need to change it for zplug's use tags containing extended globs.
+zstyle ':zplug:config:setopt' only_subshell extended_glob
+
+if ! zplug-init zplug-apply-unreleased-fixes; then
+  return 1
+fi
+
+zplug-install
+
+# Need to apply fixes once more after installing because zplug installs itself.
+zplug-apply-unreleased-fixes
+
+# Source plugins and add commands to the PATH.
+zplug load ${ZSH_VERBOSE/true/--verbose}
+
+# Clean up after ourselves.
+undefine-startup-functions
+
+# vim: set ft=zsh ts=2 sw=2 et:

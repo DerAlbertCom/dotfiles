@@ -1,0 +1,70 @@
+#!/usr/bin/env zsh
+
+# Distribute files into subdirectories of a target directory. The target
+# directory will be created if it does not exist.
+#
+# Subdirectory names are extracted from file names. The prefix length is
+# defined by PREFIX_LENGTH.
+#
+# Default parameters are read from ./.distribute in case that file exists. In it
+# you may specify TARGET_DIRECTORY, PREFIX_LENGTH and GLOB. This file also will not
+# be distributed, even if GLOB matches it.
+
+set -eu
+setopt PIPE_FAIL
+
+if [[ -f .distribute ]]; then
+  source .distribute
+fi
+
+[[ ! -v TARGET_DIRECTORY ]] && TARGET_DIRECTORY="${1?Need target directory}" && shift
+[[ ! -v PREFIX_LENGTH ]] && PREFIX_LENGTH="${1?Need prefix length}" && shift
+# Recursively find plain files and omit "no matches" error.
+[[ ! -v GLOB ]] && GLOB=**/*(.N)
+
+trap times EXIT
+
+setopt EXTENDED_GLOB
+for file in $~GLOB; do
+  # Extract filename.
+  name=${file##*/}
+
+  # Exclude .distribute from being processed.
+  [[ $name == '.distribute' ]] && continue
+
+  # Remove extension.
+  basename=${name%.*}
+  # Remove whitespace.
+  basename=${basename// /}
+
+  # Extract lowercase prefix.
+  prefix=${(L)basename:0:$PREFIX_LENGTH}
+
+  if [[ $prefix == *. ]]; then
+    prefix=${prefix[1,-2]}_
+  fi
+
+  target=$TARGET_DIRECTORY/$prefix/$name
+  mkdir --parents -- ${target%/*}
+
+  if [[ -f $target ]]; then
+    printf 'Computing checksums: %s <-> %s\n' $file $target
+    new=$(md5sum -- $file | cut --delimiter ' ' --fields 1)
+    existing=$(md5sum -- $target | cut --delimiter ' ' --fields 1)
+
+    if [[ $new == $existing ]]; then
+      printf 'Same content, deleting source: %s\n' $file
+      rm -- $file
+    fi
+
+    continue
+  fi
+
+  mv --no-clobber --verbose -- $file $target
+done
+
+omitted=($~GLOB)
+if (( $#omitted != 0 )); then
+  printf '%s file(s) omitted:\n' $#omitted
+  print -l $~GLOB
+fi

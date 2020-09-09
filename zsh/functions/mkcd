@@ -1,0 +1,6 @@
+# shellcheck disable=SC2148
+
+local dir="$1"
+mkdir --parents "$dir" && cd "$dir"
+
+# vim: set ft=zsh ts=2 sw=2 et:

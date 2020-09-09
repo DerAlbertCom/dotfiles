@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+
+# Restart systemd services with that are based on outdated docker images.
+#
+# The service name is derived from the container name.
+#
+# Container              |  systemd Service
+# example                |  example.service
+# compose_db_1           |  compose.service
+# service-foo_instance-1 |  service-foo@instance-1.service
+#
+# If systemd service units are templated, assume the docker containers are named
+# with `@` replaced by `_`, e.g. the container created by
+# service@instance.service is named service_instance.
+
+set -euo pipefail
+shopt -s extglob
+
+red='\e[1;31m'
+dark_red='\e[0;31m'
+green='\e[1;32m'
+dark_green='\e[0;32m'
+yellow='\e[1;33m'
+bold='\e[1m'
+reset='\e[0m'
+
+inspect-images()
+{
+  # shellcheck disable=SC2034
+  local -n services_inspect="${1?Need services associative array reference}"
+
+  local -a used_images
+  mapfile -t used_images < <(docker container \
+                                  ls \
+                                  --no-trunc \
+                                  --format '{{.Image}}' |
+                                  sort |
+                                  uniq)
+
+  local image
+  for image in "${used_images[@]}"; do
+    printf 'Inspecting image %b%s%b\n' \
+           "$green" \
+           "$image" \
+           "$reset"
+
+    local -a image_history
+    mapfile -t image_history < <(docker image history --no-trunc --quiet "$image")
+
+    local layer
+    for layer in "${image_history[@]}"; do
+      [[ "$layer" == '<missing>' ]] && continue
+
+      local tags_digests
+      tags_digests="$(docker image inspect --format '{{.RepoTags}}{{.RepoDigests}}' "$layer")"
+
+      # If an image has a repo digest it was downloaded from a registry. If it is
+      # untagged the tag likely has been removed by a docker pull that updated the
+      # tag.
+      local no_tags_but_repo_digests='^\[\]\[.+\]'
+      if [[ "$tags_digests" =~ $no_tags_but_repo_digests ]]; then
+        local -a containers
+        mapfile -t containers < <(docker container \
+                                        ls \
+                                        --no-trunc \
+                                        --format '{{.Names}}' \
+                                        --filter "ancestor=$image")
+
+        printf 'Outdated associated containers: %b%s%b\n' \
+               "$red" \
+               "${containers[*]}" \
+               "$reset"
+
+        local container
+        for container in "${containers[@]}"; do
+          add-restart-command services_inspect "$container"
+        done
+
+        break
+      fi
+    done
+  done
+}
+
+add-restart-command()
+{
+  local -n services_add="${1?Need services associative array reference}"
+  local container="${2?Need container name}"
+
+  local service
+  service="$(find-service "$container")"
+
+  if [[ -n "$service" ]]; then
+    printf 'Outdated associated service: %b%s%b\n' \
+           "$red" \
+           "$service" \
+           "$reset"
+  else
+    printf 'No associated service for: %b%s%b\n' \
+           "$red" \
+           "$container" \
+           "$reset"
+    return
+  fi
+
+  local name="${service%.service}"
+  name="${name%@*}"
+
+  local disabled="/var/data/$name/systemd/.drestart-disabled"
+
+  if [[ -f "$disabled" ]]; then
+    printf 'Upgrades are disabled via: %b%s%b\n' \
+           "$yellow" \
+           "$disabled" \
+           "$reset"
+    return
+  fi
+
+  local script="/var/data/$name/systemd/upgrade"
+
+  if [[ -x "$script" ]]; then
+    services_add["$service"]="$script"
+  elif [[ "$service" == *@* ]]; then
+    services_add["$service"]="systemctl restart --all '$service'"
+  else
+    # shellcheck disable=SC2034
+    services_add["$service"]="systemctl restart '$service'"
+  fi
+}
+
+find-service()
+{
+  local container="${1?Need container name}"
+
+  local service="${container%%_*}.service"
+  local template="${container%%_*}@*.service"
+
+  if systemctl is-active --quiet "$service"; then
+    printf '%s' "$service"
+  elif systemctl is-active --quiet "$template"; then
+    printf '%s' "$template"
+  fi
+}
+
+print-services()
+{
+  local -n services_print="${1?Need services associative array reference}"
+  local selecting="${2-}"
+  [[ -n "$selecting" ]] && local -n selected_print="${3?Need selection associative array reference}"
+
+  if ! (( ${#services_print[@]} )); then
+    printf 'No services need restarting\n'
+    return 1
+  fi
+
+  if [[ -z "$selecting" ]]; then
+    printf '\nThe following services are about to restart:\n'
+  else
+    printf '\n%-5s | %-8s | %-40s | %s\n' 'Index' 'Selected' 'Service' 'Command'
+  fi
+
+  local -a sorted_services
+  mapfile -t sorted_services < <(printf '%s\n' "${!services_print[@]}" | sort)
+
+  local service index=0
+  for service in "${sorted_services[@]}"; do
+    local index_color="$bold"
+    local service_color="$green"
+    local command_color="$red"
+
+    (( index++ ))
+    if (( index % 2 == 0 )); then
+      index_color="$reset"
+      service_color="$dark_green"
+      command_color="$dark_red"
+    fi
+
+    if [[ -z "$selecting" ]]; then
+      printf '%b%-40s%b | %b%s%b\n' \
+             "$service_color" \
+             "$service" \
+             "$reset" \
+             "$command_color" \
+             "${services_print[$service]}" \
+             "$reset"
+    else
+      local included=' '
+
+      # shellcheck disable=SC2102
+      [[ -v selected_print[$service] ]] && included='*'
+
+      printf '%b%-5s%b | %b%-8s%b | %b%-40s%b | %b%s%b\n' \
+             "$index_color" \
+             "$index" \
+             "$reset" \
+             "$index_color" \
+             "$included" \
+             "$reset" \
+             "$service_color" \
+             "$service" \
+             "$reset" \
+             "$command_color" \
+             "${services_print[$service]}" \
+             "$reset"
+    fi
+  done
+}
+
+select-services()
+{
+  local -n services_select="${1?Need services associative array reference}"
+
+  local -a sorted_services
+  mapfile -t sorted_services < <(printf '%s\n' "${!services_select[@]}" | sort)
+
+  local -A index_to_service=()
+  local service index=0
+  for service in "${sorted_services[@]}"; do
+    ((index++))
+    index_to_service[$index]="$service"
+  done
+
+  local -A selected=()
+
+  printf 'Enter the indices for the services you want to restart\n'
+  printf '  - separate indices with spaces\n'
+  printf '  - * selects everything\n'
+  printf '  - -<index> excludes service (-* excludes everything)\n'
+  printf '  - no input accepts selection\n'
+
+  while :; do
+    print-services services_select --select selected
+
+    local -a selection
+    read -r -p '> ' -e -a selection
+
+    # Nothing entered, break.
+    if ! (( ${#selection[@]} )); then
+      services_select=()
+      local service
+      for service in "${!selected[@]}"; do
+        services_select["$service"]="${selected["$service"]}"
+      done
+
+      return
+    fi
+
+    local value
+    for value in "${selection[@]}"; do
+      case "$value" in
+        +([[:digit:]]))
+          if [[ -v index_to_service[$value] ]]; then
+            local service="${index_to_service[$value]}"
+
+            selected["$service"]="${services_select["$service"]}"
+          fi
+          ;;
+
+        -+([[:digit:]]))
+          value="${value#-}"
+
+          if [[ -v index_to_service[$value] ]]; then
+            local service="${index_to_service[$value]}"
+
+            unset selected["$service"]
+          fi
+          ;;
+
+        '-*')
+          selected=()
+          ;;
+
+        '*')
+          local service
+          for service in "${!services_select[@]}"; do
+            selected["$service"]="${services_select["$service"]}"
+          done
+          ;;
+
+        *)
+          printf 'Unsupported value: %s\n' "$value"
+          ;;
+      esac
+    done
+  done
+}
+
+ask-continue()
+{
+  # shellcheck disable=SC2034
+  local -n services_ask="${1?Need services associative array reference}"
+  local force="${2?Need force option}"
+  local answer
+
+  if [[ ! "$force" =~ ^(-f|--force)$ ]]; then
+    read -r -e -p "Continue? [y/N/i] " answer
+
+    case "$answer" in
+      [Ii])
+        select-services services_ask
+        print-services services_ask && printf '\n'
+        ;;
+
+      [Yy])
+        ;;
+
+      *)
+        return 1
+        ;;
+    esac
+  fi
+}
+
+restart-services()
+{
+  local -n services_restart="${1?Need services associative array reference}"
+  local service
+
+  local -a sorted_services
+  mapfile -t sorted_services < <(printf '%s\n' "${!services_restart[@]}" | sort)
+
+  local service index=0
+  for service in "${sorted_services[@]}"; do
+    printf '%b%s%b: running %b%s%b\n' \
+           "$green" \
+           "$service" \
+           "$reset" \
+           "$red" \
+           "${services_restart[$service]}" \
+           "$reset"
+    eval ${services_restart[$service]}
+  done
+
+  printf '%bDone%b restarting services\n' \
+         "$green" \
+         "$reset"
+}
+
+declare -A outdated
+outdated=()
+
+inspect-images outdated
+print-services outdated || exit 0
+ask-continue outdated "${1-}" || exit $?
+restart-services outdated
