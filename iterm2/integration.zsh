@@ -7,3 +7,4 @@ if [[ -f "$HOME/.iterm2_shell_integration.zsh" ]] && \
    [[ "$ITERM_PROFILE" != 'zsh Trainings' ]]; then
   source "$HOME/.iterm2_shell_integration.zsh"
 fi
+/Users/aweinert/.dotfiles/iterm2/Default.itermcolors

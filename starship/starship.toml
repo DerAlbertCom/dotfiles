@@ -1,0 +1,29 @@
+# ~/.config/starship.toml
+
+[cmd_duration]
+min_time = 500
+prefix = "⏱ "
+
+
+[git_status]
+ahead="🔺 "
+behind="🔻 "
+untracked = "👻"
+staged.value = "++"
+staged.style = "green"
+staged_count.enabled = true
+staged_count.style = "green"
+
+modified_count.enabled = true
+
+renamed_count.enabled = true
+
+deleted = "🗑 "
+deleted_count.enabled = true
+modified = "✏️ "
+show_sync_count=true
+
+[time]
+disabled=true
+
+[nodejs]

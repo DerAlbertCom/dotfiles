@@ -1,0 +1,6 @@
+# shellcheck shell=bash
+
+  symlink "$topic/starship.toml" "$HOME/.config/starship.toml"
+  formula starship
+
+# vim: set ft=sh ts=2 sw=2 et:
