@@ -24,6 +24,8 @@ cask 'microsoft-edge'
 cask 'jetbrains-toolbox'
 cask 'skype'
 cask 'choosy'
+cask 'ukelele'
+
 
 # Apps from the Mac App Store.
 mas 'Microsoft Remote Desktop', id: 1_295_203_466
