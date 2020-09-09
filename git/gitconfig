@@ -1,0 +1,65 @@
+[user]
+	name = Albert Weinert
+    useconfigonly = true
+	email = info@der-albert.com
+
+[includeif "gitdir:**/BioNTech/**/.git"]
+    path = gitconfig.biontech
+[includeif "gitdir:**/biontech/**/.git"]
+    path = gitconfig.biontech
+[includeif "gitdir:**/private/**/.git"]
+    path = gitconfig.private
+[includeif "gitdir:**/canTia/**/.git"]
+    path = gitconfig.private
+
+[diff]	
+    tool = bc
+[difftool "bc"]
+	path = bcomp
+[merge]
+	tool = bc
+[mergetool "bc"]
+	path = bcomp
+	trustExitCode = true
+[alias]
+	fdevelop = fetch origin develop:develop
+	amend = commit --amend
+	mt = mergetool --tools=bc
+	last = log -1 HEAD
+	visual = !gitk
+	logo = log --oneline
+[core]
+	editor = code --wait
+	autocrlf = true
+	pager = diff-so-fancy | less --tabs=4 -RFX
+[filter "lfs"]
+	process = git-lfs filter-process
+	required = true
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+[credential]
+	helper = manager
+[pager]
+	branch = false
+[log]
+	date = default
+[pull]
+	ff = only
+[color]
+	ui = true
+[color "diff-highlight"]
+	oldNormal = red bold
+	oldHighlight = red bold 52
+	newNormal = green bold
+	newHighlight = green bold 22
+[color "diff"]
+	meta = 11
+	frag = magenta bold
+	commit = yellow bold
+	old = red bold
+	new = green bold
+	whitespace = red reverse
+[rerere]
+	enabled = true
+[init]
+	defaultBranch = main

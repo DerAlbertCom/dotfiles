@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+#
+# bootstrap installs things.
+#
+# Based on https://github.com/holman/dotfiles.
+
+# Fail on errors.
+set -euo pipefail
+
+# Show executed commands.
+# set -x
+
+if [[ -t 0 ]]; then
+  light_red='\e[01;31m'
+  green='\e[0;32m'
+  light_green='\e[01;32m'
+  light_yellow='\e[01;33m'
+  cyan='\e[0;36m'
+  light_cyan='\e[01;36m'
+  reset_color='\e[0m'
+  clear_line='\e[2K'
+else
+  light_red=''
+  green=''
+  light_green=''
+  light_yellow=''
+  cyan=''
+  light_cyan=''
+  reset_color=''
+  clear_line=''
+fi
+
+info() {
+  printf   "\r  [%b INFO %b] %b\n" \
+           "$light_cyan" "$reset_color" "$1"
+}
+
+user() {
+  printf   "\r  [%b  ?   %b] %b " \
+           "$light_yellow" "$reset_color" "$1"
+}
+
+success() {
+  printf "\r%b  [%b  OK  %b] %b\n" \
+         "$clear_line" "$light_green" "$reset_color" "$1"
+}
+
+fail() {
+  printf "\r%b  [%b FAIL %b] %b\n\n" \
+         "$clear_line" "$light_red" "$reset_color" "$1"
+  exit 1
+}
+
+ostypes() {
+  case "$OSTYPE" in
+    msys)    printf 'windows';;
+    cygwin)  printf "cygwin windows";;
+    *)       printf '%s' "$OSTYPE";;
+  esac
+}
+
+readlink-e() {
+  local file="$1"
+
+  if ! target="$(readlink --canonicalize-existing "$file" 2> /dev/null)"; then
+    perl -e 'use Cwd "abs_path"; print abs_path(shift)' "$file"
+    return
+  fi
+
+  printf '%s' "$target"
+}
+
+home-directory() {
+  case "${1?Need OS type}" in
+    windows) cygpath --unix "$USERPROFILE";;
+    *)       printf '%s' "$HOME";;
+  esac
+}
+
+symlink() {
+  local src="${1?Need link source}"
+  # If dst is not given, use src file name in $HOME, prepended with a dot.
+  local dst
+  if (($# >= 2)); then
+    dst="$2"
+  else
+    dst="$HOME/.${src##*/}"
+  fi
+
+  local overwrite backup skip
+  # These global variables might be changed by symlink (which is either called
+  # here or by individual bootstrappers).
+  # We cannot declare them here because this would overwrite their contents
+  # if the variable is assigned already.
+  # declare overwrite_all backup_all skip_all
+
+  if [[ -f "$dst" ]] || \
+     [[ -d "$dst" ]] || \
+     [[ -L "$dst" ]]; then
+    src="$(readlink-e "$src")"
+    local current_target
+    current_target="$(readlink-e "$dst")"
+
+    if [[ "$current_target" == "$src" ]]; then
+      success "$(printf 'Already linked %b%s%b <-> %b%s%b' \
+                        "$green" "$src" "$reset_color" \
+                        "$green" "$dst" "$reset_color")"
+      return
+    fi
+
+    if [[ -z "${overwrite_all-}" ]] && \
+       [[ -z "${backup_all-}" ]] && \
+       [[ -z "${skip_all-}" ]]; then
+      # shellcheck disable=SC2183
+      user "$(printf "File already exists: %b%s%b (%b%s%b)
+           Will be linked to: %b%s%b
+           What do you want to do? (%bs%b)kip, (%bS%b)kip all, (%bo%b)verwrite, (%bO%b)verwrite all, (%bb%b)ackup, (%bB%b)ackup all?" \
+           "$green" "$dst" "$reset_color" \
+           "$cyan" "$(file --brief "$dst" 2>/dev/null)" "$reset_color" \
+           "$green" "$src" "$reset_color" \
+           "$light_yellow" "$reset_color" \
+           "$light_yellow" "$reset_color" \
+           "$light_yellow" "$reset_color" \
+           "$light_yellow" "$reset_color" \
+           "$light_yellow" "$reset_color" \
+           "$light_yellow" "$reset_color")"
+
+      while true; do
+        local action
+        read -rn 1 action
+
+        case "$action" in
+          o) overwrite=true;     break;;
+          O) overwrite_all=true; break;;
+          b) backup=true;        break;;
+          B) backup_all=true;    break;;
+          s) skip=true;          break;;
+          S) skip_all=true;      break;;
+          *) ;;
+        esac
+      done
+    fi
+
+    overwrite="${overwrite:-${overwrite_all-}}"
+    backup="${backup:-${backup_all-}}"
+    skip="${skip:-${skip_all-}}"
+
+    if [[ -n "${skip-}" ]]; then
+      success "$(printf 'Skipped %b%s%b <-> %b%s%b' \
+                        "$green" "$src" "$reset_color" \
+                        "$green" "$dst" "$reset_color")"
+      return
+    fi
+
+    if [[ -n "${overwrite-}" ]]; then
+      rm -rf -- "$dst"
+      success "$(printf 'Removed %b%s%b' \
+                        "$green" "$dst" "$reset_color")"
+    fi
+
+    if [[ -n "${backup-}" ]]; then
+      mv -- "$dst" "${dst}.backup"
+      success "$(printf 'Moved %b%s%b to %b%s%b' \
+                        "$green" "$dst" "$reset_color" \
+                        "$green" "${dst}.backup" "$reset_color")"
+    fi
+  fi
+
+  mkdir -p "$(dirname -- "$dst")"
+  # Create native symlinks on Windows.
+  CYGWIN=winsymlinks:nativestrict ln -s "$src" "$dst"
+
+  success "$(printf 'Linked %b%s%b to %b%s%b' \
+                    "$green" "$src" "$reset_color" \
+                    "$green" "$dst" "$reset_color")"
+}
+
+symlink-dotfiles-to-home() {
+  local root="${1?Need dotfiles root directory}"
+  local home="${2?Need home directory}"
+  local ostype="${3?Need OS type}"
+
+  # shellcheck disable=SC2016
+  info "$(printf 'Installing dotfiles to %b$HOME%b=%b%s%b for %b$OSTYPE%b=%b%s%b' \
+                  "$light_red" "$reset_color" \
+                  "$green" "$home" "$reset_color" \
+                  "$light_red" "$reset_color" \
+                  "$light_yellow" "$ostype" "$reset_color")"
+
+  # Add a symlink for this dotfiles directory.
+  symlink "$root" "$home/.dotfiles"
+}
+
+run-topic-bootstrapper() {
+  local bootstrapper="${1?Need bootstrapper}"
+  shift
+  local home="${1?Need home directory}"
+  shift
+  local ostype="${1?Need OS type}"
+  shift
+  local script
+
+  local topic
+  topic="${bootstrapper%/bootstrap}"
+  topic_name="${topic##*/}"
+
+  # If we got extra args this is the list of topics we can only install.
+  while (($#)); do
+    if [[ "$topic_name" == "$1" ]]; then
+      break
+    fi
+
+    shift
+
+    if ! (($#)); then
+      return
+    fi
+  done
+
+  info "$(printf 'Running %b%s%b' \
+                  "$green" "$bootstrapper" "$reset_color")"
+
+  # Build script wrapper around bootstrapper.
+  script="\
+    set -euo pipefail
+    source '$0' # This script.
+    source '$root/macos/homebrew'
+    source '$bootstrapper'
+    # Write out the perhaps changed values for the *_all variables.
+    >&3 printf '# magic unicorns!\n'
+    >&3 printf 'overwrite_all=%s\n' \"\$overwrite_all\"
+    >&3 printf 'backup_all=%s\n' \"\$backup_all\"
+    >&3 printf 'skip_all=%s\n' \"\$skip_all\"
+    >&3 printf '# magic unicorns end!\n'
+  "
+
+  variables="$(mktemp)"
+
+  # Run wrapper with bash (like we do here).
+  # We pass some variables that we manage on our side and that may be used by
+  # the individual bootstrappers.
+  # The *_all variables may also be changed by user input.
+  /usr/bin/env -i \
+               PATH="$PATH" \
+               HOME="$home" \
+               OSTYPE="$OSTYPE" \
+               topic="$topic" \
+               \
+               overwrite_all="${overwrite_all-}" \
+               backup_all="${backup_all-}" \
+               skip_all="${skip_all-}" \
+               \
+               bash -c "$script" \
+               3>"$variables"
+
+  eval "$(cat "$variables")"
+  rm -f "$variables"
+}
+
+install-dotfiles() {
+  local root home ostype bootstrappers bootstrapper
+
+  root="$(dirname "$(readlink-e "$0")")"
+
+  info "$(printf "Installing dotfiles from %b%s%b" \
+                 "$green" "$root" "$reset_color")"
+
+  for ostype in $(ostypes); do
+    home="$(home-directory "$ostype")"
+    symlink-dotfiles-to-home "$root" "$home" "$ostype"
+
+    # Find topics with bootstrappers. Bash > 3 cannot be assumed (on macOS).
+    # https://stackoverflow.com/a/32931403/149264
+    IFS=$'\n' read -r -d '' -a bootstrappers < <(find -H \
+                                                     "$home/.dotfiles" \
+                                                     -mindepth 2 \
+                                                     -maxdepth 2 \
+                                                     -type f \
+                                                     -name bootstrap \
+                                                   | sort && printf '\0')
+
+    for bootstrapper in "${bootstrappers[@]}"; do
+      run-topic-bootstrapper "$bootstrapper" "$home" "$ostype" "$@"
+    done
+  done
+
+  info "$(printf 'All installed from %b%s%b' \
+                 "$green" "$root" "$reset_color")"
+}
+
+if [[ "${1-}" == --force ]]; then
+  overwrite_all=true
+  shift
+fi
+
+# If we are sourced from a topic bootstrapper script this will be set and we
+# will only provide our functions.
+if [[ -z "${topic-}" ]]; then
+  install-dotfiles "$@"
+fi
