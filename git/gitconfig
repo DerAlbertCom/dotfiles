@@ -1,7 +1,6 @@
 [user]
 	name = Albert Weinert
     useconfigonly = true
-	email = info@der-albert.com
 
 [includeif "gitdir:**/BioNTech/**/.git"]
     path = .gitconfig.biontech
