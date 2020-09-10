@@ -4,13 +4,13 @@
 	email = info@der-albert.com
 
 [includeif "gitdir:**/BioNTech/**/.git"]
-    path = gitconfig.biontech
+    path = .gitconfig.biontech
 [includeif "gitdir:**/biontech/**/.git"]
-    path = gitconfig.biontech
+    path = .gitconfig.biontech
 [includeif "gitdir:**/private/**/.git"]
-    path = gitconfig.private
+    path = .gitconfig.private
 [includeif "gitdir:**/canTia/**/.git"]
-    path = gitconfig.private
+    path = .gitconfig.private
 
 [diff]	
     tool = bc
