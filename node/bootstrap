@@ -1,7 +1,9 @@
 # shellcheck shell=bash
 
 if [[ "$OSTYPE" == darwin* ]]; then
+  formula node
   formula node@12
+  formula yarn
   formula nodenv
   formula nodenv/nodenv/nodenv-package-rehash
 fi
